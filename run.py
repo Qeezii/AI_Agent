@@ -18,14 +18,26 @@ def main():
     # Создаём агента
     agent = Agent(folder_id, api_key, model)
 
+    # Выводим информацию о загруженной истории
+    history_count = len(agent.messages) // 2  # приблизительное количество обменов
+    print(f"Загружено {len(agent.messages)} сообщений ({history_count} обменов).")
+    print("Чат с агентом запущен. Команды: /clear — очистить историю, /exit или /quit — выход.")
+
     print("Чат с агентом запущен. Введите 'exit' или 'quit' для выхода.")
     while True:
-        user_input = input("\nВы: ")
-        if user_input.lower() in ("exit", "quit"):
+        user_input = input("\nВы: ").strip()
+        if not user_input:
+            continue
+        # Команды выхода
+        if user_input.lower() in ("/exit", "/quit", "exit", "quit"):
             print("До свидания!")
             break
-        if not user_input.strip():
+        # Команды очистки
+        if user_input.lower() in ("/clear", "clear"):
+            agent.clear_history()
+            print("История очищена.")
             continue
+
         response = agent.ask(user_input)
         print(f"Агент: {response}")
 
