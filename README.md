@@ -3,3 +3,6 @@ day6:
 
 day7:
 ![day7](https://github.com/user-attachments/assets/319d4248-89eb-45db-b8d4-b0b9e9ab0a06)
+
+day8:
+![day8](https://github.com/user-attachments/assets/37093cb8-23e0-4c2a-bc0e-3a876d6420c2)

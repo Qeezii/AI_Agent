@@ -20,8 +20,8 @@ def main():
 
     # Выводим информацию о загруженной истории
     history_count = len(agent.messages) // 2  # приблизительное количество обменов
-    print(f"Загружено {len(agent.messages)} сообщений ({history_count} обменов).")
-    print("Чат с агентом запущен. Команды: /clear — очистить историю, /exit или /quit — выход.")
+    print(f"📂 Загружено {len(agent.messages)} сообщений ({history_count} обменов).")
+    print("🤖 Чат с агентом запущен. Команды: /clear — очистить историю, /exit или /quit — выход.")
 
     print("Чат с агентом запущен. Введите 'exit' или 'quit' для выхода.")
     while True:
@@ -39,7 +39,19 @@ def main():
             continue
 
         response = agent.ask(user_input)
-        print(f"Агент: {response}")
+        
+        # Выводим ответ
+        print(f"\n🤖 Агент: {response}")
+        
+        # Выводим статистику токенов последнего запроса и накопленную
+        if agent.last_total_tokens > 0:
+            print(f"\n📊 Токены текущего запроса:")
+            print(f"   - prompt_tokens: {agent.last_prompt_tokens}")
+            print(f"   - completion_tokens: {agent.last_completion_tokens}")
+            print(f"   - total: {agent.last_total_tokens}")
+            print(f"📈 Всего за сессию: prompt={agent.total_prompt_tokens}, "
+                  f"completion={agent.total_completion_tokens}, total={agent.total_tokens}")
+        print()  # пустая строка для разделения
 
 if __name__ == "__main__":
     main()
