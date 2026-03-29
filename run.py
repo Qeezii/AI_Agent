@@ -15,15 +15,24 @@ def main():
         print("Ошибка: не указаны YANDEX_CLOUD_FOLDER и/или YANDEX_CLOUD_API_KEY в .env файле.")
         return
 
+    print("Выберите режим работы:")
+    print("1. Без сжатия (храним всю историю)")
+    print("2. Со сжатием (храним последние 10 сообщений, остальное в summary)")
+    choice = input("Ваш выбор (1/2): ").strip()
+    use_compression = (choice == "2")
+    max_history = 10 # количество сообщений без сжатия
+
     # Создаём агента
-    agent = Agent(folder_id, api_key, model)
+    agent = Agent(folder_id, api_key, model,
+                  use_compression=use_compression,
+                  max_history_messages=max_history)
 
-    # Выводим информацию о загруженной истории
-    history_count = len(agent.messages) // 2  # приблизительное количество обменов
-    print(f"📂 Загружено {len(agent.messages)} сообщений ({history_count} обменов).")
-    print("🤖 Чат с агентом запущен. Команды: /clear — очистить историю, /exit или /quit — выход.")
-
-    print("Чат с агентом запущен. Введите 'exit' или 'quit' для выхода.")
+    print(f"\nРежим: {'Сжатие включено' if use_compression else 'Без сжатия'}")
+    print(f"Загружено сообщений: {len(agent.messages)}")
+    if agent.summary:
+        print(f"Имеется summary: {agent.summary[:100]}...")
+    print("Команды: /clear — очистить историю, /exit — выход\n")
+    
     while True:
         user_input = input("\nВы: ").strip()
         if not user_input:
