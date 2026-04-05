@@ -10,9 +10,7 @@ def main():
         sys.exit(1)
 
     system_instruction = (
-        "Ты — опытный аналитик по сбору требований и разработке цифровых двойников промышленных объектов на Anylogic. "
-        "Твоя задача — задавать короткие уточняющие вопросы, чтобы собрать полное техническое задание. "
-        "Не давай длинных объяснений, только вопросы и краткие подтверждения."
+        "Ты — опытный аналитик по созданию цифровых двойников промышленных объектов."
     )
     agent = Agent(folder_id, api_key, model, system_instruction=system_instruction)
 
@@ -23,7 +21,11 @@ def main():
     print("/branch name — создать новую ветку (стратегия 3)")
     print("/branches — список веток (стратегия 3)")
     print("/switch_branch name — переключиться на ветку (стратегия 3)")
-    print("/clear — очистить историю (для текущей стратегии)")
+    print("/clear — очистить краткосрочную историю (и факты для стратегии 2)")
+    print("/save_working ключ: значение — сохранить в рабочую память")
+    print("/save_longterm тип: содержание — сохранить в долговременную память")
+    print("/show_memory — показать все три слоя памяти")
+    print("/clear_memory — очистить рабочую и долговременную память")
     print("/exit — выход")
     print(f"Текущая стратегия: {agent.get_strategy_name()}, окно: {agent.window_size}")
 
@@ -35,7 +37,7 @@ def main():
             print("До свидания!")
             break
 
-        # 1. Команды для стратегии 3 (ветвления) – самые специфичные сначала
+        # 1. Команды для стратегии 3 (ветвления)
         if user_input.startswith("/switch_branch") and isinstance(agent.strategy, BranchingStrategy):
             parts = user_input.split()
             if len(parts) < 2:
@@ -46,7 +48,6 @@ def main():
                 print(f"Переключились на ветку {name}")
             continue
 
-        # Проверяем точное совпадение для /branches, чтобы не путать с /branch
         if user_input == "/branches" and isinstance(agent.strategy, BranchingStrategy):
             print("Ветки:", ", ".join(agent.strategy.branches.keys()))
             print(f"Текущая: {agent.strategy.current_branch}")
@@ -62,7 +63,45 @@ def main():
                 print(f"Ветка {name} создана (копия текущей).")
             continue
 
-        # 2. Остальные команды
+        # 2. Команды управления памятью
+        if user_input.startswith("/save_working"):
+            try:
+                parts = user_input[13:].strip().split(":", 1)
+                if len(parts) != 2:
+                    print("Используйте: /save_working ключ: значение")
+                    continue
+                key = parts[0].strip()
+                value = parts[1].strip()
+                agent.save_to_working(key, value)
+            except Exception as e:
+                print(f"Ошибка: {e}")
+            continue
+
+        if user_input.startswith("/save_longterm"):
+            try:
+                parts = user_input[14:].strip().split(":", 1)
+                if len(parts) != 2:
+                    print("Используйте: /save_longterm тип: содержание")
+                    continue
+                fact_type = parts[0].strip()
+                content = parts[1].strip()
+                agent.save_to_longterm(fact_type, content)
+            except Exception as e:
+                print(f"Ошибка: {e}")
+            continue
+
+        if user_input == "/show_memory":
+            agent.show_memory()
+            continue
+
+        if user_input == "/clear_memory":
+            agent.working.clear()
+            agent.long_term.clear()
+            agent.save_memory()
+            print("Рабочая и долговременная память очищены.")
+            continue
+
+        # 3. Остальные команды
         if user_input.startswith("/switch"):
             try:
                 sid = int(user_input.split()[1])
@@ -76,6 +115,7 @@ def main():
             try:
                 new_size = int(user_input.split()[1])
                 agent.window_size = new_size
+                agent.short_term.max_size = new_size * 2  # синхронизируем размер краткосрочной памяти
                 agent.save_memory()
                 print(f"Размер окна установлен: {agent.window_size}")
             except:
@@ -95,7 +135,7 @@ def main():
             agent.clear_history()
             continue
 
-        # 3. Обычный запрос
+        # 4. Обычный запрос
         answer = agent.ask(user_input)
         print(f"\n🤖 Агент: {answer}")
         pt, ct, tt = agent.last_stats

@@ -15,7 +15,6 @@ class Strategy:
         pass
 
     def reset(self):
-        """Сбрасывает специфичные для стратегии данные."""
         pass
 
     def load_state(self, state: dict):
@@ -30,8 +29,10 @@ class SlidingWindowStrategy(Strategy):
         context = []
         if self.agent.system_instruction:
             context.append({"role": "system", "content": self.agent.system_instruction})
-        messages = self.agent.messages[-self.agent.window_size:] if self.agent.window_size > 0 else []
-        context.extend(messages)
+        # Краткосрочная память уже синхронизирована с self.agent.short_term
+        # Берём последние сообщения из краткосрочной памяти
+        recent = self.agent.short_term.get_recent(self.agent.window_size)
+        context.extend(recent)
         context.append({"role": "user", "content": user_input})
         return context
 
@@ -66,7 +67,8 @@ class StickyFactsStrategy(Strategy):
             return ""
 
     def update_memory(self, user_input: str, assistant_response: str):
-        recent = self.agent.messages[-6:] if len(self.agent.messages) >= 6 else self.agent.messages[:]
+        # Берём последние 3 обмена (6 сообщений) из краткосрочной памяти
+        recent = self.agent.short_term.get_recent(6)
         recent.append({"role": "assistant", "content": assistant_response})
         new_facts_text = self._update_facts_from_messages(recent)
         if new_facts_text:
@@ -81,8 +83,8 @@ class StickyFactsStrategy(Strategy):
             context.append({"role": "system", "content": self.agent.system_instruction})
         if self.facts:
             context.append({"role": "system", "content": f"Важные факты из диалога:\n{self.format_facts()}"})
-        messages = self.agent.messages[-self.agent.window_size:] if self.agent.window_size > 0 else []
-        context.extend(messages)
+        recent = self.agent.short_term.get_recent(self.agent.window_size)
+        context.extend(recent)
         context.append({"role": "user", "content": user_input})
         return context
 
@@ -121,7 +123,8 @@ class BranchingStrategy(Strategy):
             print(f"Ветка {name} не существует!")
             return False
         self.current_branch = name
-        self.agent.messages = self.branches[name]
+        # Синхронизируем краткосрочную память с веткой
+        self.agent.short_term.messages = self.branches[name]
         return True
 
     def delete_branch(self, name: str):
@@ -142,14 +145,15 @@ class BranchingStrategy(Strategy):
         context = []
         if self.agent.system_instruction:
             context.append({"role": "system", "content": self.agent.system_instruction})
-        context.extend(self.agent.messages)
+        # Для веток используем текущую краткосрочную память (она синхронизирована с веткой)
+        context.extend(self.agent.short_term.get_recent())
         context.append({"role": "user", "content": user_input})
         return context
 
     def reset(self):
-        self.branches = {"main": self.agent.messages.copy()}
+        self.branches = {"main": self.agent.short_term.messages.copy()}
         self.current_branch = "main"
-        self.agent.messages = self.branches["main"]
+        self.agent.short_term.messages = self.branches["main"]
 
     def save_state(self) -> dict:
         return {
@@ -161,6 +165,6 @@ class BranchingStrategy(Strategy):
         self.branches = state.get("branches", {"main": []})
         self.current_branch = state.get("current_branch", "main")
         if self.current_branch in self.branches:
-            self.agent.messages = self.branches[self.current_branch]
+            self.agent.short_term.messages = self.branches[self.current_branch]
         else:
-            self.agent.messages = []
+            self.agent.short_term.messages = []
