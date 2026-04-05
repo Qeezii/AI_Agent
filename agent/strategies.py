@@ -1,4 +1,5 @@
 from typing import List, Dict, Optional, TYPE_CHECKING, cast
+import openai
 from openai.types.chat import ChatCompletionMessageParam
 if TYPE_CHECKING:
     from .agent import Agent
@@ -62,8 +63,21 @@ class StickyFactsStrategy(Strategy):
             )
             answer = response.choices[0].message.content or ""
             return answer.strip()
+        except openai.BadRequestError as e:
+            # Ошибка валидации (например, слишком длинный контекст)
+            print(f"⚠️ Ошибка валидации при обновлении фактов: {e}")
+            return ""
+        except openai.AuthenticationError as e:
+            print(f"⚠️ Ошибка аутентификации при обновлении фактов: {e}")
+            return ""
+        except openai.APIConnectionError as e:
+            print(f"⚠️ Сетевая ошибка при обновлении фактов: {e}")
+            return ""
+        except openai.RateLimitError as e:
+            print(f"⚠️ Превышен лимит запросов при обновлении фактов: {e}")
+            return ""
         except Exception as e:
-            print(f"⚠️ Ошибка обновления фактов: {e}")
+            print(f"⚠️ Неожиданная ошибка при обновлении фактов: {e}")
             return ""
 
     def update_memory(self, user_input: str, assistant_response: str):
@@ -72,10 +86,23 @@ class StickyFactsStrategy(Strategy):
         recent.append({"role": "assistant", "content": assistant_response})
         new_facts_text = self._update_facts_from_messages(recent)
         if new_facts_text:
+            updated = False
             for line in new_facts_text.split("\n"):
+                line = line.strip()
+                if not line:
+                    continue
                 if ":" in line:
                     key, val = line.split(":", 1)
-                    self.facts[key.strip()] = val.strip()
+                    key = key.strip()
+                    val = val.strip()
+                    if key and val:
+                        old_val = self.facts.get(key)
+                        if old_val != val:
+                            self.facts[key] = val
+                            updated = True
+                            print(f"📝 Обновлён факт: {key} = {val}")
+            if updated:
+                print(f"✅ Факты обновлены. Всего фактов: {len(self.facts)}")
 
     def prepare_context(self, user_input: str) -> List[Dict[str, str]]:
         context = []
