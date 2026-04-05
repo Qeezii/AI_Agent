@@ -44,6 +44,65 @@ class Agent:
 
         self.load_memory()
 
+        # Убедимся, что профиль загружен
+        if not self.long_term.profile:
+            self.long_term.profile = {
+                "name": "Пользователь",
+                "role": "инженер",
+                "expertise_level": "средний",
+                "preferred_style": "лаконичный",
+                "format_preference": "список",
+                "constraints": [],
+            }
+    
+    def set_profile(self, **kwargs):
+        """Установить одно или несколько полей профиля."""
+        for key, value in kwargs.items():
+            if key in self.long_term.profile:
+                self.long_term.profile[key] = value
+            else:
+                print(f"Неизвестное поле профиля: {key}")
+        self.save_memory()
+        print("Профиль обновлён.")
+
+    def get_profile(self) -> dict:
+        return self.long_term.profile
+
+    def load_profile_preset(self, preset_name: str):
+        """Загрузить предустановленный профиль."""
+        presets = {
+            "эксперт": {
+                "name": "Эксперт",
+                "role": "технический специалист",
+                "expertise_level": "эксперт",
+                "preferred_style": "технический",
+                "format_preference": "параграфы",
+                "constraints": []
+            },
+            "новичок": {
+                "name": "Новичок",
+                "role": "начинающий специалист",
+                "expertise_level": "низкий",
+                "preferred_style": "простой",
+                "format_preference": "список",
+                "constraints": ["Избегайте сложных терминов", "Давайте примеры"]
+            },
+            "менеджер": {
+                "name": "Менеджер",
+                "role": "руководитель проекта",
+                "expertise_level": "средний",
+                "preferred_style": "лаконичный",
+                "format_preference": "маркированный список",
+                "constraints": ["Акцент на сроках и бюджете", "Минимум технических деталей"]
+            }
+        }
+        if preset_name not in presets:
+            print(f"Доступные пресеты: {', '.join(presets.keys())}")
+            return
+        self.long_term.profile.update(presets[preset_name])
+        self.save_memory()
+        print(f"Загружен профиль: {preset_name}")
+
     def load_memory(self):
         if not os.path.exists(self.history_file):
             return
@@ -130,24 +189,14 @@ class Agent:
         print(self.long_term.format_for_prompt())
 
     def ask(self, user_input: str) -> str:
-        # Формируем контекст через текущую стратегию (которая уже использует краткосрочную память)
-        # Но перед этим добавим рабочую и долговременную память как системные сообщения
-        # Мы не меняем стратегию, а дополняем контекст вне её.
-        # Однако стратегия prepare_context уже может включать свою логику. Для чистоты:
-        # Соберём контекст сами, но используем стратегию только для получения базового контекста (без memory)
-        # Вместо этого просто расширим то, что возвращает стратегия.
+        # Формируем контекст с учётом профиля
         base_context = self.strategy.prepare_context(user_input)
-        # Вставляем рабочую и долговременную память после системной инструкции, но перед сообщениями
-        working_text = self.working.format_for_prompt()
-        longterm_text = self.long_term.format_for_prompt()
-        if working_text != "Нет данных текущей задачи.":
-            base_context.insert(1, {"role": "system", "content": f"Рабочая память (текущая задача):\n{working_text}"})
-        if longterm_text != "Нет долговременной информации.":
-            # Если есть системная инструкция, то индекс может сместиться
-            insert_index = 1
-            if working_text != "Нет данных текущей задачи.":
-                insert_index = 2
-            base_context.insert(insert_index, {"role": "system", "content": f"Долговременная память:\n{longterm_text}"})
+        # Вставляем профиль как системное сообщение после основной инструкции
+        profile_text = self.long_term.format_for_prompt()  # включает и факты, и профиль
+        if profile_text and profile_text != "Нет долговременной информации.":
+            # Находим позицию после системной инструкции (если есть)
+            insert_index = 1 if base_context and base_context[0]["role"] == "system" else 0
+            base_context.insert(insert_index, {"role": "system", "content": f"Персонализация:\n{profile_text}"})
 
         try:
             response = self.client.chat.completions.create(

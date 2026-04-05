@@ -64,7 +64,14 @@ class LongTermMemory:
     """Долговременная память: профиль пользователя, предпочтения, решения."""
     def __init__(self):
         self.facts: List[Dict[str, Any]] = []  # каждый факт: {"type": "preference", "content": "...", "timestamp": ...}
-        self.profile: Dict[str, Any] = {}      # информация о пользователе
+        self.profile: Dict[str, Any] = {       # информация о пользователе
+            "name": "Пользователь",
+            "role": "инженер",
+            "expertise_level": "средний",     # новичок, средний, эксперт
+            "preferred_style": "лаконичный",  # подробный, лаконичный, технический, простой
+            "format_preference": "список",    # абзацы, маркированные пункты, список
+            "constraints": [],                # список ограничений (например, "не использовать сложные термины")
+        }
 
     def add_fact(self, fact_type: str, content: str):
         self.facts.append({
@@ -82,18 +89,28 @@ class LongTermMemory:
     def format_for_prompt(self) -> str:
         parts = []
         if self.profile:
-            parts.append("Профиль пользователя:\n" + "\n".join(f"  {k}: {v}" for k, v in self.profile.items()))
+            profile_lines = [f"  {k}: {v}" for k, v in self.profile.items() if k != "constraints" or v]
+            if self.profile.get("constraints"):
+                profile_lines.append(f"  constraints: {', '.join(self.profile['constraints'])}")
+            parts.append("Профиль пользователя:\n" + "\n".join(profile_lines))
         if self.facts:
             parts.append("Известные факты:\n" + "\n".join(f"  {f['type']}: {f['content']}" for f in self.facts))
         return "\n".join(parts) if parts else "Нет долговременной информации."
 
     def clear(self):
+        # Не сбрасываем профиль полностью, а только факты
         self.facts = []
-        self.profile = {}
 
     def to_dict(self) -> dict:
         return {"facts": self.facts, "profile": self.profile}
 
     def load_dict(self, data: dict):
         self.facts = data.get("facts", [])
-        self.profile = data.get("profile", {})
+        self.profile = data.get("profile", {
+            "name": "Пользователь",
+            "role": "инженер",
+            "expertise_level": "средний",
+            "preferred_style": "лаконичный",
+            "format_preference": "список",
+            "constraints": [],
+        })

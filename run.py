@@ -15,6 +15,9 @@ def main():
     agent = Agent(folder_id, api_key, model, system_instruction=system_instruction)
 
     print("\n🤖 Агент запущен. Команды:")
+    print("/profile — показать текущий профиль")
+    print("/set_profile поле=значение — изменить профиль (например, /set_profile preferred_style=технический)")
+    print("/load_preset эксперт|новичок|менеджер — загрузить предустановленный профиль")
     print("/switch N — сменить стратегию (1=Sliding Window, 2=Sticky Facts, 3=Branching)")
     print("/window N — установить размер окна (для стратегий 1 и 2)")
     print("/facts — показать текущие факты (стратегия 2)")
@@ -37,7 +40,39 @@ def main():
             print("До свидания!")
             break
 
-        # 1. Команды для стратегии 3 (ветвления)
+        # Команды профиля
+        if user_input == "/profile":
+            prof = agent.get_profile()
+            print("Текущий профиль пользователя:")
+            for k, v in prof.items():
+                print(f"  {k}: {v}")
+            continue
+
+        if user_input.startswith("/set_profile"):
+            # Парсим ключ=значение
+            cmd_rest = user_input[13:].strip()
+            if "=" not in cmd_rest:
+                print("Используйте: /set_profile поле=значение (например, /set_profile role=Специалист по цифровым двойникам)")
+                continue
+            # Разделяем по первому знаку =
+            eq_index = cmd_rest.find("=")
+            key = cmd_rest[:eq_index].strip()
+            value = cmd_rest[eq_index+1:].strip()
+            if key:
+                agent.set_profile(**{key: value})
+            else:
+                print("Не указано поле")
+            continue
+
+        if user_input.startswith("/load_preset"):
+            preset = user_input[13:].strip().lower()
+            if preset:
+                agent.load_profile_preset(preset)
+            else:
+                print("Используйте: /load_preset эксперт|новичок|менеджер")
+            continue
+
+        # Команды для стратегии 3 (ветвления)
         if user_input.startswith("/switch_branch") and isinstance(agent.strategy, BranchingStrategy):
             parts = user_input.split()
             if len(parts) < 2:
@@ -63,7 +98,7 @@ def main():
                 print(f"Ветка {name} создана (копия текущей).")
             continue
 
-        # 2. Команды управления памятью
+        # Команды управления памятью
         if user_input.startswith("/save_working"):
             try:
                 parts = user_input[13:].strip().split(":", 1)
@@ -101,7 +136,7 @@ def main():
             print("Рабочая и долговременная память очищены.")
             continue
 
-        # 3. Остальные команды
+        # Остальные команды
         if user_input.startswith("/switch"):
             try:
                 sid = int(user_input.split()[1])
@@ -135,7 +170,7 @@ def main():
             agent.clear_history()
             continue
 
-        # 4. Обычный запрос
+        # Обычный запрос
         answer = agent.ask(user_input)
         print(f"\n🤖 Агент: {answer}")
         pt, ct, tt = agent.last_stats

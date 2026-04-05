@@ -12,3 +12,6 @@ day9:
 
 day11:
 ![day11](https://github.com/user-attachments/assets/148d3c38-b1e3-4f20-a2de-a01582ed5cac)
+
+day12:
+![day12](https://github.com/user-attachments/assets/65a3584c-57c9-4991-b0c5-52b5534e6ff8)
