@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 import sys
 from agent import Agent, StickyFactsStrategy, BranchingStrategy
 from agent.utils import load_env
@@ -29,6 +28,12 @@ def main():
     print("/save_longterm тип: содержание — сохранить в долговременную память")
     print("/show_memory — показать все три слоя памяти")
     print("/clear_memory — очистить рабочую и долговременную память")
+    print("/task_state — показать текущее состояние задачи")
+    print("/task_stage <stage> — перейти на указанный этап (planning, execution, validation, done, paused, error)")
+    print("/task_pause [причина] — поставить задачу на паузу")
+    print("/task_resume [stage] — возобновить задачу (опционально указать этап)")
+    print("/task_step <описание> — обновить текущий шаг")
+    print("/task_complete <результат> — завершить текущий шаг и записать результат")
     print("/exit — выход")
     print(f"Текущая стратегия: {agent.get_strategy_name()}, окно: {agent.window_size}")
 
@@ -168,6 +173,50 @@ def main():
 
         if user_input == "/clear":
             agent.clear_history()
+            continue
+
+        # Команды состояния задачи
+        if user_input == "/task_state":
+            agent.show_task_state()
+            continue
+
+        if user_input.startswith("/task_stage"):
+            parts = user_input.split()
+            if len(parts) < 2:
+                print("Используйте: /task_stage <stage> (planning, execution, validation, done, paused, error)")
+                continue
+            stage = parts[1]
+            step_desc = parts[2] if len(parts) > 2 else ""
+            expected = parts[3] if len(parts) > 3 else ""
+            agent.update_task_stage(stage, step_desc, expected)
+            continue
+
+        if user_input.startswith("/task_pause"):
+            reason = user_input[11:].strip()
+            agent.pause_task(reason)
+            continue
+
+        if user_input.startswith("/task_resume"):
+            stage = user_input[12:].strip()
+            if stage:
+                agent.resume_task(stage)
+            else:
+                agent.resume_task()
+            continue
+
+        if user_input.startswith("/task_step"):
+            step_desc = user_input[10:].strip()
+            if not step_desc:
+                print("Используйте: /task_step <описание шага>")
+                continue
+            agent.task_state.update_step(step_desc)
+            agent.save_memory()
+            print(f"Шаг обновлён: {step_desc}")
+            continue
+
+        if user_input.startswith("/task_complete"):
+            result = user_input[14:].strip()
+            agent.complete_task_step(result)
             continue
 
         # Обычный запрос

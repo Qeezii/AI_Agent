@@ -7,6 +7,7 @@ from .strategies import (
     Strategy, SlidingWindowStrategy, StickyFactsStrategy, BranchingStrategy
 )
 from .memory import ShortTermMemory, WorkingMemory, LongTermMemory
+from .task_state import TaskStateMachine, TaskStage
 
 class Agent:
     def __init__(self, folder_id: str, api_key: str, model: str,
@@ -41,6 +42,9 @@ class Agent:
         }
         self.current_strategy_id: int = 1
         self.strategy: Strategy = self.strategies[self.current_strategy_id]
+
+        # Состояние задачи как конечный автомат
+        self.task_state = TaskStateMachine()
 
         self.load_memory()
 
@@ -120,6 +124,11 @@ class Agent:
             if isinstance(self.strategy, BranchingStrategy):
                 # Уже загружено через strategy.load_state
                 pass
+            
+            # Загрузка состояния задачи
+            task_state_data = data.get("task_state")
+            if task_state_data:
+                self.task_state = TaskStateMachine.from_dict(task_state_data)
         except Exception as e:
             print(f"⚠️ Ошибка загрузки состояния: {e}")
 
@@ -130,7 +139,8 @@ class Agent:
             "short_term": self.short_term.to_dict(),
             "working": self.working.to_dict(),
             "long_term": self.long_term.to_dict(),
-            "strategy_state": self.strategy.save_state()
+            "strategy_state": self.strategy.save_state(),
+            "task_state": self.task_state.to_dict()
         }
         os.makedirs(os.path.dirname(self.history_file), exist_ok=True)
         with open(self.history_file, "w", encoding="utf-8") as f:
@@ -188,7 +198,119 @@ class Agent:
         print("\n=== ДОЛГОВРЕМЕННАЯ ПАМЯТЬ ===")
         print(self.long_term.format_for_prompt())
 
+    def show_task_state(self):
+        """Показать текущее состояние задачи."""
+        from datetime import datetime
+        status = self.task_state.get_status()
+        print("\n=== СОСТОЯНИЕ ЗАДАЧИ ===")
+        print(f"ID: {status['task_id']}")
+        print(f"Этап: {status['stage']}")
+        print(f"Текущий шаг: {status['current_step']}")
+        print(f"Ожидаемое действие: {status['expected_action']}")
+        print(f"Шагов выполнено: {status['steps_count']}")
+        print(f"Пауза: {'Да' if status['paused'] else 'Нет'}")
+        if status['paused'] and status['paused_at']:
+            dt = datetime.fromtimestamp(status['paused_at'])
+            print(f"Пауза с: {dt.strftime('%Y-%m-%d %H:%M:%S')}")
+        print(f"Обновлено: {datetime.fromtimestamp(status['updated_at']).strftime('%Y-%m-%d %H:%M:%S')}")
+
+    def update_task_stage(self, new_stage: str, step_description: str = "", expected_action: str = ""):
+        """
+        Обновить этап задачи.
+        
+        Аргументы:
+            new_stage: planning, execution, validation, done, paused, error
+            step_description: описание текущего шага
+            expected_action: ожидаемое действие
+        """
+        from .task_state import TaskStage
+        try:
+            stage = TaskStage(new_stage)
+        except ValueError:
+            print(f"Неизвестный этап: {new_stage}. Допустимые: {[e.value for e in TaskStage]}")
+            return False
+        
+        success = self.task_state.transition_to(stage, step_description, expected_action)
+        if success:
+            self.save_memory()
+            print(f"✅ Этап задачи изменён на {new_stage}")
+        else:
+            print(f"❌ Невозможно перейти из {self.task_state.stage.value} в {new_stage}")
+        return success
+
+    def pause_task(self, reason: str = ""):
+        """Поставить задачу на паузу."""
+        success = self.task_state.pause(reason)
+        if success:
+            self.save_memory()
+            print(f"✅ Задача поставлена на паузу. Причина: {reason if reason else 'не указана'}")
+        else:
+            print("❌ Не удалось поставить задачу на паузу (возможно, задача уже завершена)")
+        return success
+
+    def resume_task(self, new_stage: str = ""):
+        """Возобновить задачу после паузы."""
+        from .task_state import TaskStage
+        stage = None
+        if new_stage:
+            try:
+                stage = TaskStage(new_stage)
+            except ValueError:
+                print(f"Неизвестный этап: {new_stage}")
+                return False
+        
+        success = self.task_state.resume(stage)
+        if success:
+            self.save_memory()
+            print(f"✅ Задача возобновлена на этапе {self.task_state.stage.value}")
+        else:
+            print("❌ Не удалось возобновить задачу (возможно, задача не на паузе)")
+        return success
+
+    def complete_task_step(self, result: str = ""):
+        """Завершить текущий шаг задачи."""
+        self.task_state.complete_step(result)
+        self.save_memory()
+        print(f"✅ Шаг завершён: {result}")
+
+    def _update_task_state_after_response(self, user_input: str, answer: str):
+        """
+        Обновить состояние задачи после ответа агента.
+        
+        Логика:
+        1. Завершить текущий шаг с кратким описанием ответа.
+        2. Если этап PLANNING и ответ содержит план (нумерованный список, слова "план", "шаг"),
+           перейти в этап EXECUTION.
+        3. Обновить текущий шаг на "Обработка ответа агента".
+        """
+        from .task_state import TaskStage
+        
+        # Завершаем текущий шаг
+        result_preview = answer[:100] + ("..." if len(answer) > 100 else "")
+        self.task_state.complete_step(f"Ответ агента: {result_preview}")
+        
+        # Проверяем, нужно ли перейти из PLANNING в EXECUTION
+        if self.task_state.stage == TaskStage.PLANNING:
+            # Простые эвристики для определения, что ответ содержит план
+            plan_indicators = ["1.", "2.", "3.", "4.", "5.", "6.", "7.", "8.", "9.", "10.",
+                               "первый", "второй", "третий", "четвертый", "пятый",
+                               "шаг", "этап", "план", "плана", "плану", "планы"]
+            if any(indicator in answer.lower() for indicator in plan_indicators):
+                self.task_state.transition_to(TaskStage.EXECUTION,
+                                              step_description="Выполнение плана",
+                                              expected_action="Выполнить шаги плана, создавать код/документацию")
+        
+        # Начинаем новый шаг для следующего взаимодействия
+        self.task_state.update_step(f"Ожидание следующего запроса")
+
     def ask(self, user_input: str) -> str:
+        # Обновляем состояние задачи перед обработкой запроса
+        from .task_state import TaskStage
+        
+        # Если текущий шаг пуст, начинаем новый шаг
+        if not self.task_state.current_step:
+            self.task_state.update_step(f"Запрос пользователя: {user_input[:50]}...")
+        
         # Формируем контекст с учётом профиля
         base_context = self.strategy.prepare_context(user_input)
         # Вставляем профиль как системное сообщение после основной инструкции
@@ -222,6 +344,10 @@ class Agent:
 
             # Уведомляем стратегию об обновлении (для фактов)
             self.strategy.update_memory(user_input, answer)
+            
+            # Обновляем состояние задачи после ответа
+            self._update_task_state_after_response(user_input, answer)
+            
             # Сохраняем состояние
             self.save_memory()
             return answer
