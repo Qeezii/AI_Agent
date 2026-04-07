@@ -8,6 +8,7 @@ from .strategies import (
 )
 from .memory import ShortTermMemory, WorkingMemory, LongTermMemory
 from .task_state import TaskStateMachine, TaskStage
+from .invariants import InvariantManager
 
 class Agent:
     def __init__(self, folder_id: str, api_key: str, model: str,
@@ -45,6 +46,9 @@ class Agent:
 
         # Состояние задачи как конечный автомат
         self.task_state = TaskStateMachine()
+
+        # Менеджер инвариантов
+        self.invariant_manager = InvariantManager()
 
         self.load_memory()
 
@@ -307,17 +311,39 @@ class Agent:
         # Обновляем состояние задачи перед обработкой запроса
         from .task_state import TaskStage
         
+        # Проверка инвариантов пользовательского запроса
+        violations = self.invariant_manager.check_violations(user_input)
+        if violations:
+            explanation = self.invariant_manager.explain_violations(violations)
+            # Добавляем запрос в историю, но не генерируем ответ
+            self.short_term.add({"role": "user", "content": user_input})
+            self.short_term.add({"role": "assistant", "content": explanation})
+            self.save_memory()
+            return explanation
+        
         # Если текущий шаг пуст, начинаем новый шаг
         if not self.task_state.current_step:
             self.task_state.update_step(f"Запрос пользователя: {user_input[:50]}...")
         
         # Формируем контекст с учётом профиля
         base_context = self.strategy.prepare_context(user_input)
+        
+        # Добавляем инварианты в системное сообщение
+        invariants_text = self.invariant_manager.format_for_prompt()
+        if invariants_text:
+            # Находим позицию после системной инструкции (если есть)
+            insert_index = 1 if base_context and base_context[0]["role"] == "system" else 0
+            base_context.insert(insert_index, {"role": "system", "content": f"ИНВАРИАНТЫ (не нарушай):\n{invariants_text}"})
+        
         # Вставляем профиль как системное сообщение после основной инструкции
         profile_text = self.long_term.format_for_prompt()  # включает и факты, и профиль
         if profile_text and profile_text != "Нет долговременной информации.":
             # Находим позицию после системной инструкции (если есть)
+            # Уже есть инварианты, вставляем после них
             insert_index = 1 if base_context and base_context[0]["role"] == "system" else 0
+            # Сдвигаем индекс, если уже вставили инварианты
+            if invariants_text:
+                insert_index += 1
             base_context.insert(insert_index, {"role": "system", "content": f"Персонализация:\n{profile_text}"})
 
         try:
@@ -328,6 +354,17 @@ class Agent:
                 max_tokens=1000
             )
             answer = response.choices[0].message.content or "⚠️ Пустой ответ от модели."
+
+            # Проверка ответа на нарушение инвариантов
+            answer_violations = self.invariant_manager.check_violations(answer)
+            if answer_violations:
+                explanation = self.invariant_manager.explain_violations(answer_violations)
+                error_msg = f"⚠️ Ответ нарушает инварианты и был отклонён.\n\n{explanation}\n\nПожалуйста, сформулируйте запрос иначе."
+                # Добавляем запрос и сообщение об ошибке в историю
+                self.short_term.add({"role": "user", "content": user_input})
+                self.short_term.add({"role": "assistant", "content": error_msg})
+                self.save_memory()
+                return error_msg
 
             if response.usage:
                 pt = getattr(response.usage, 'prompt_tokens', 0) or 0

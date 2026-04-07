@@ -34,6 +34,10 @@ def main():
     print("/task_resume [stage] — возобновить задачу (опционально указать этап)")
     print("/task_step <описание> — обновить текущий шаг")
     print("/task_complete <результат> — завершить текущий шаг и записать результат")
+    print("/invariants — показать все инварианты")
+    print("/add_invariant категория описание — добавить новый инвариант")
+    print("/remove_invariant id — удалить инвариант по ID")
+    print("/check_invariants текст — проверить текст на нарушение инвариантов")
     print("/exit — выход")
     print(f"Текущая стратегия: {agent.get_strategy_name()}, окно: {agent.window_size}")
 
@@ -217,6 +221,69 @@ def main():
         if user_input.startswith("/task_complete"):
             result = user_input[14:].strip()
             agent.complete_task_step(result)
+            continue
+
+        # Команды инвариантов
+        if user_input == "/invariants":
+            invariants = agent.invariant_manager.get_all()
+            if not invariants:
+                print("Нет активных инвариантов.")
+            else:
+                print("Активные инварианты:")
+                for inv in invariants:
+                    print(f"  [{inv.category.value}] {inv.description}")
+                    if inv.rationale:
+                        print(f"    Обоснование: {inv.rationale}")
+                    print(f"    ID: {inv.id}, Серьёзность: {inv.severity}")
+            continue
+
+        if user_input.startswith("/add_invariant"):
+            # Формат: /add_invariant категория "описание" ["обоснование"]
+            parts = user_input[15:].strip().split(maxsplit=2)
+            if len(parts) < 2:
+                print("Используйте: /add_invariant категория \"описание\" [\"обоснование\"]")
+                print("Категории: architecture, technical_decisions, stack_constraints, business_rules, other")
+                continue
+            category_str = parts[0].strip()
+            description = parts[1].strip().strip('"')
+            rationale = parts[2].strip().strip('"') if len(parts) > 2 else ""
+            from agent.invariants import InvariantCategory, Invariant
+            try:
+                category = InvariantCategory(category_str)
+            except ValueError:
+                print(f"Неизвестная категория. Допустимые: {[c.value for c in InvariantCategory]}")
+                continue
+            # Генерируем уникальный ID
+            import uuid
+            inv_id = f"user-{uuid.uuid4().hex[:8]}"
+            invariant = Invariant(inv_id, category, description, rationale, "medium")
+            agent.invariant_manager.add(invariant)
+            print(f"Инвариант добавлен с ID: {inv_id}")
+            continue
+
+        if user_input.startswith("/remove_invariant"):
+            inv_id = user_input[18:].strip()
+            if not inv_id:
+                print("Используйте: /remove_invariant id")
+                continue
+            if agent.invariant_manager.remove(inv_id):
+                print(f"Инвариант {inv_id} удалён.")
+            else:
+                print(f"Инвариант с ID {inv_id} не найден.")
+            continue
+
+        if user_input.startswith("/check_invariants"):
+            text = user_input[17:].strip()
+            if not text:
+                print("Используйте: /check_invariants текст")
+                continue
+            violations = agent.invariant_manager.check_violations(text)
+            if violations:
+                explanation = agent.invariant_manager.explain_violations(violations)
+                print("Нарушения обнаружены:")
+                print(explanation)
+            else:
+                print("Нарушений не обнаружено.")
             continue
 
         # Обычный запрос

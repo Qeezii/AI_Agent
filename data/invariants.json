@@ -1,0 +1,53 @@
+{
+  "invariants": [
+    {
+      "id": "arch-1",
+      "category": "architecture",
+      "description": "Ассистент использует трёхслойную память: краткосрочную, рабочую и долговременную",
+      "rationale": "Архитектура определена в проекте и не должна меняться",
+      "severity": "high"
+    },
+    {
+      "id": "arch-2",
+      "category": "architecture",
+      "description": "Ассистент поддерживает три стратегии управления контекстом: Sliding Window, Sticky Facts, Branching",
+      "rationale": "Стратегии реализованы и должны оставаться доступными",
+      "severity": "high"
+    },
+    {
+      "id": "tech-1",
+      "category": "technical_decisions",
+      "description": "Используется Yandex Cloud LLM API, а не OpenAI или другие провайдеры",
+      "rationale": "Решение принято из-за требований к локализации и стоимости",
+      "severity": "high"
+    },
+    {
+      "id": "stack-1",
+      "category": "stack_constraints",
+      "description": "Проект написан на Python 3.9+, без использования других языков",
+      "rationale": "Ограничение стека для упрощения поддержки",
+      "severity": "high"
+    },
+    {
+      "id": "stack-2",
+      "category": "stack_constraints",
+      "description": "Не использовать сторонние библиотеки без согласования",
+      "rationale": "Минимизация зависимостей",
+      "severity": "high"
+    },
+    {
+      "id": "business-1",
+      "category": "business_rules",
+      "description": "Ассистент специализируется на создании цифровых двойников промышленных объектов",
+      "rationale": "Бизнес-фокус проекта",
+      "severity": "high"
+    },
+    {
+      "id": "business-2",
+      "category": "business_rules",
+      "description": "Все ответы должны быть профессиональными и технически точными",
+      "rationale": "Требования к качеству контента",
+      "severity": "high"
+    }
+  ]
+}
